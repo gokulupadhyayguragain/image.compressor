@@ -132,11 +132,16 @@ jobs:
         run: |
           kubectl rollout restart deployment/gocools-backend
           kubectl rollout restart deployment/gocools-frontend
+          
+      - name: Delete old pods to force update
+        run: |
+          kubectl delete pods -l app=gocools-backend --grace-period=0 --force || true
+          kubectl delete pods -l app=gocools-frontend --grace-period=0 --force || true
 
       - name: Wait for rollouts
         run: |
-          kubectl -n default rollout status deployment/gocools-backend --timeout=5m
-          kubectl -n default rollout status deployment/gocools-frontend --timeout=5m
+          kubectl -n default rollout status deployment/gocools-backend --timeout=3m
+          kubectl -n default rollout status deployment/gocools-frontend --timeout=3m
 
       - name: Get service URL
         run: |
