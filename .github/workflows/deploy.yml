@@ -125,8 +125,28 @@ jobs:
           ECR_REPOSITORY_BACKEND: ${{ secrets.ECR_REPOSITORY_BACKEND }}
           ECR_REPOSITORY_FRONTEND: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
 
+      - name: Delete stuck pods before applying new deployment
+        run: |
+          echo "🧹 Cleaning up stuck pods..."
+          kubectl delete pod -l app=gocools-frontend --force --grace-period=0 || true
+          kubectl delete pod -l app=gocools-backend --force --grace-period=0 || true
+          sleep 5
+
       - name: Apply Kubernetes manifests
         run: kubectl apply -f k8s/deployment-generated.yaml
+
+      - name: Wait for old pods to terminate
+        run: |
+          echo "⏳ Waiting for old pods to fully terminate..."
+          for i in {1..30}; do
+            OLD_PODS=$(kubectl get pods -l app=gocools-frontend -o json | jq '.items | length')
+            if [ "$OLD_PODS" -le 1 ]; then
+              echo "✅ Old pods terminated"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
 
       - name: Wait for deployments to be ready
         run: |
