@@ -1,0 +1,66 @@
+# Additional Cost Optimization Resources
+# Apply this file with: kubectl apply -f cost-optimization.yaml
+
+# PodDisruptionBudget to ensure availability during node scaling
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gocools-backend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gocools-backend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gocools-frontend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: gocools-frontend
+
+# NetworkPolicy to restrict unnecessary traffic (reduces data transfer costs)
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gocools-backend-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app: gocools-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow from frontend
+    - from:
+        - podSelector:
+            matchLabels:
+              app: gocools-frontend
+      ports:
+        - protocol: TCP
+          port: 3000
+    # Allow health checks
+    - ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gocools-frontend-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app: gocools-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow all inbound traffic to frontend (it's public-facing)
+    - ports:
+        - protocol: TCP
+          port: 80

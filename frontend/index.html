@@ -24,8 +24,14 @@
 <body>
   <h1>gocools image compressor</h1>
   <p>Choose an image and upload. Server will compress losslessly where possible and return a downloadable file.</p>
+  <p><strong>Important:</strong> Make sure the backend server is running. Access this page at <code>http://localhost:3000</code> (not by opening the HTML file directly).</p>
 
   <form id="uploadForm">
+    <div style="margin-bottom: 1rem;">
+      <label for="qualitySlider">Compression Level: <span id="qualityValue">50</span>%</label><br/>
+      <input type="range" id="qualitySlider" name="quality" min="0" max="100" value="50" style="width: 100%; margin-top: 0.5rem;" />
+      <small style="color: #666;">Higher values = more compression, smaller file size</small>
+    </div>
     <input type="file" id="imageInput" name="image" accept="image/*" />
     <button type="submit">Compress</button>
   </form>
@@ -56,13 +62,21 @@
 
   <script>
     // If you open the frontend via Live Server (http://127.0.0.1:5500),
-    // set BACKEND_URL to the backend address (where npm start runs).
-    const BACKEND_URL = '';
+    // set BACKEND_URL to 'http://localhost:3000' (where the backend runs).
+    // When served by the backend itself, leave as empty string.
+    const BACKEND_URL = 'http://localhost:3000';
 
   const form = document.getElementById('uploadForm');
     const imageInput = document.getElementById('imageInput');
     const preview = document.getElementById('preview');
     const result = document.getElementById('result');
+    const qualitySlider = document.getElementById('qualitySlider');
+    const qualityValue = document.getElementById('qualityValue');
+
+    // Update quality value display
+    qualitySlider.addEventListener('input', () => {
+      qualityValue.textContent = qualitySlider.value;
+    });
 
     imageInput.addEventListener('change', () => {
       const f = imageInput.files[0];
@@ -166,7 +180,9 @@
       fd.append('image', f);
 
       try {
-        const res = await fetch(BACKEND_URL + '/compress', { method: 'POST', body: fd });
+        const compressionLevel = qualitySlider.value;
+        const quality = Math.max(1, 100 - compressionLevel);
+        const res = await fetch(BACKEND_URL + `/compress?quality=${quality}`, { method: 'POST', body: fd });
         const j = await res.json();
         if (!j.ok) return result.innerText = 'Error: ' + (j.error || 'unknown');
 

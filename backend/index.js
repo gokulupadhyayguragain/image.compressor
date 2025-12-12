@@ -65,15 +65,12 @@ app.post('/compress', upload.single('image'), async (req, res) => {
         .png({ compressionLevel: 9 })
         .toFile(finalOutPath);
     } else if (mime === 'image/jpeg' || mime === 'image/jpg') {
-      // JPEG is typically lossy; to avoid quality loss we copy by default.
-      if (req.query.reencode === 'true') {
-        await sharp(inPath)
-          .jpeg({ quality: 95, mozjpeg: true })
-          .toFile(finalOutPath);
-      } else {
-        // lossless copy for JPEG
-        fs.copyFileSync(inPath, finalOutPath);
-      }
+      // JPEG compression: higher compression level = lower quality = smaller file
+      const compressionLevel = parseInt(req.query.quality) || 50;
+      const quality = Math.max(1, 100 - compressionLevel);
+      await sharp(inPath)
+        .jpeg({ quality, mozjpeg: true })
+        .toFile(finalOutPath);
     } else {
       // Default: attempt to copy or write same ext
       try {
