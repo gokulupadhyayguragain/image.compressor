@@ -128,17 +128,7 @@ jobs:
       - name: Apply Kubernetes manifests
         run: kubectl apply -f k8s/deployment-generated.yaml
 
-      - name: Restart deployments to pull new images
-        run: |
-          kubectl rollout restart deployment/gocools-backend
-          kubectl rollout restart deployment/gocools-frontend
-          
-      - name: Delete old pods to force update
-        run: |
-          kubectl delete pods -l app=gocools-backend --grace-period=0 --force || true
-          kubectl delete pods -l app=gocools-frontend --grace-period=0 --force || true
-
-      - name: Wait for rollouts
+      - name: Wait for deployments to be ready
         run: |
           kubectl -n default rollout status deployment/gocools-backend --timeout=3m
           kubectl -n default rollout status deployment/gocools-frontend --timeout=3m

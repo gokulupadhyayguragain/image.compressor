@@ -4,11 +4,6 @@ metadata:
   name: gocools-frontend
 spec:
   replicas: 1
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
   selector:
     matchLabels:
       app: gocools-frontend
@@ -17,7 +12,6 @@ spec:
       labels:
         app: gocools-frontend
     spec:
-      terminationGracePeriodSeconds: 30
       containers:
         - name: frontend
           image: ${ECR_REGISTRY}/${ECR_REPOSITORY_FRONTEND}:latest
@@ -65,11 +59,6 @@ metadata:
   name: gocools-backend
 spec:
   replicas: 1
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
   selector:
     matchLabels:
       app: gocools-backend
@@ -78,7 +67,6 @@ spec:
       labels:
         app: gocools-backend
     spec:
-      terminationGracePeriodSeconds: 30
       containers:
         - name: backend
           image: ${ECR_REGISTRY}/${ECR_REPOSITORY_BACKEND}:latest
