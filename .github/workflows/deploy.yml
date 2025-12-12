@@ -69,9 +69,9 @@ jobs:
 
       - name: Create EKS cluster (if enabled)
         if: ${{ env.CREATE_EKS == 'true' }}
-        env:
-          CI: true
-        run: ./scripts/eksctl.sh up ${{ secrets.EKS_CLUSTER_NAME }} ${{ secrets.AWS_REGION }} t3.small
+        run: |
+          chmod +x ./scripts/eksctl.sh
+          CI=true ./scripts/eksctl.sh up ${{ secrets.EKS_CLUSTER_NAME }} ${{ secrets.AWS_REGION }} t3.small
 
       - name: Update kubeconfig for EKS
         run: |
