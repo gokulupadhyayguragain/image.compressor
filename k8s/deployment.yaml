@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gocools-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gocools-frontend
+  template:
+    metadata:
+      labels:
+        app: gocools-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: gocools/frontend:latest
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gocools-frontend
+spec:
+  selector:
+    app: gocools-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gocools-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gocools-backend
+  template:
+    metadata:
+      labels:
+        app: gocools-backend
+    spec:
+      containers:
+        - name: backend
+          image: gocools/backend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gocools-backend
+spec:
+  selector:
+    app: gocools-backend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP

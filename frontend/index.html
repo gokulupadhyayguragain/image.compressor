@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>gocools image compressor</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; max-width: 820px; margin: 2rem auto; padding: 1rem; }
+    h1 { text-transform: lowercase; }
+    .preview { margin-top: 1rem; }
+    .result { margin-top: 1rem; }
+    .compare { position: relative; width: 100%; max-width: 600px; height: auto; margin-top: 12px; }
+    .compare img { display: block; max-width: 100%; height: auto; }
+    .compare .top { position: absolute; left: 0; top: 0; overflow: hidden; }
+    .slider { width: 100%; margin-top: 8px; }
+    .sizes { margin-top: 8px; font-size: 0.95rem; }
+    .gallery { display:flex; gap:12px; margin-top:12px; }
+    .gallery .col { flex:1; min-width:180px; }
+    .file-item { display:flex; gap:8px; align-items:center; padding:6px; border:1px solid #eee; border-radius:6px; cursor:pointer; }
+    .file-item:hover { background:#fafafa; }
+    .file-item img { width:48px; height:48px; object-fit:cover; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <h1>gocools image compressor</h1>
+  <p>Choose an image and upload. Server will compress losslessly where possible and return a downloadable file.</p>
+
+  <form id="uploadForm">
+    <input type="file" id="imageInput" name="image" accept="image/*" />
+    <button type="submit">Compress</button>
+  </form>
+
+  <div class="preview" id="preview"></div>
+  <div class="result" id="result"></div>
+  <div id="comparison" style="display:none;">
+    <h3>comparison</h3>
+    <div class="compare" id="compareBox">
+      <img id="origImg" src="" alt="original" />
+      <div class="top" id="topWrap"><img id="compImg" src="" alt="compressed" /></div>
+    </div>
+    <input type="range" id="compareRange" class="slider" min="0" max="100" value="50" />
+    <div class="sizes" id="sizesInfo"></div>
+  </div>
+
+  <h3>server gallery</h3>
+  <div class="gallery">
+    <div class="col">
+      <h4>input (originals)</h4>
+      <div id="inputList">loading…</div>
+    </div>
+    <div class="col">
+      <h4>output (compressed)</h4>
+      <div id="outputList">loading…</div>
+    </div>
+  </div>
+
+  <script>
+    // If you open the frontend via Live Server (http://127.0.0.1:5500),
+    // set BACKEND_URL to the backend address (where npm start runs).
+    const BACKEND_URL = 'http://127.0.0.1:3000';
+
+  const form = document.getElementById('uploadForm');
+    const imageInput = document.getElementById('imageInput');
+    const preview = document.getElementById('preview');
+    const result = document.getElementById('result');
+
+    imageInput.addEventListener('change', () => {
+      const f = imageInput.files[0];
+      if (!f) return preview.innerHTML = '';
+      const url = URL.createObjectURL(f);
+      preview.innerHTML = `<strong>Selected:</strong> ${f.name} (${Math.round(f.size/1024)} KB)<br/><img src="${url}" style="max-width:300px; display:block; margin-top:8px;"/>`;
+    });
+
+    // fetch server gallery lists
+    async function loadGallery() {
+      try {
+        const inRes = await fetch(BACKEND_URL + '/api/files?dir=input');
+        const outRes = await fetch(BACKEND_URL + '/api/files?dir=output');
+        const inJson = await inRes.json();
+        const outJson = await outRes.json();
+        renderList('inputList', inJson.files || [], 'input');
+        renderList('outputList', outJson.files || [], 'output');
+      } catch (e) {
+        document.getElementById('inputList').innerText = 'failed to load';
+        document.getElementById('outputList').innerText = 'failed to load';
+      }
+    }
+
+    // Track selected server-side files
+    let selectedInput = null;
+    let selectedOutput = null;
+
+    function renderList(containerId, files, dir) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = '';
+      if (!files || !files.length) return el.innerText = 'no files';
+      files.forEach(f => {
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        const thumb = document.createElement('img');
+        thumb.src = BACKEND_URL + f.url;
+        const meta = document.createElement('div');
+        meta.innerHTML = `<div>${f.name}</div><small>${Math.round(f.size/1024)} KB</small>`;
+        div.appendChild(thumb);
+        div.appendChild(meta);
+        div.addEventListener('click', () => {
+          const origImg = document.getElementById('origImg');
+          const compImg = document.getElementById('compImg');
+          const comparison = document.getElementById('comparison');
+          const sizesInfo = document.getElementById('sizesInfo');
+
+          if (dir === 'input') {
+            selectedInput = f;
+            origImg.src = BACKEND_URL + f.url;
+            origImg.dataset.size = f.size || 0;
+          } else {
+            selectedOutput = f;
+            compImg.src = BACKEND_URL + f.url;
+            compImg.dataset.size = f.size || 0;
+          }
+
+          // show comparison only when we have at least one image; overlay works best when both available
+          comparison.style.display = 'block';
+
+          // when both images available, sync overlay and sizes
+          function trySync() {
+            const topWrap = document.getElementById('topWrap');
+            const range = document.getElementById('compareRange');
+            // set overlay width
+            topWrap.style.width = range.value + '%';
+            // sync heights to larger of two images
+            const aH = origImg.naturalHeight || origImg.height || 0;
+            const bH = compImg.naturalHeight || compImg.height || 0;
+            const h = Math.max(aH, bH);
+            if (h) {
+              origImg.style.height = compImg.style.height = h + 'px';
+              topWrap.style.height = h + 'px';
+            }
+
+            const originalBytes = (selectedInput && selectedInput.size) ? selectedInput.size : null;
+            const outputBytes = (selectedOutput && selectedOutput.size) ? selectedOutput.size : null;
+            function hr(n){ if(!n && n !== 0) return '—'; const units=['B','KB','MB','GB']; let i=0; let v=n; while(v>=1024 && i<units.length-1){ v/=1024; i++; } return v.toFixed(1)+' '+units[i]; }
+            const reduction = (originalBytes && outputBytes) ? Math.round((1 - (outputBytes/originalBytes))*100) : null;
+            sizesInfo.innerHTML = `<strong>original:</strong> ${hr(originalBytes)} &nbsp; <strong>compressed:</strong> ${hr(outputBytes)} ${reduction!==null?`&nbsp; (<strong>${reduction}%</strong> reduction)`:''}`;
+          }
+
+          // try syncing after small delay to allow images to start loading
+          setTimeout(trySync, 150);
+          // also run when images load
+          origImg.onload = trySync;
+          compImg.onload = trySync;
+        });
+        el.appendChild(div);
+      });
+    }
+
+    loadGallery();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      result.innerText = 'Uploading...';
+      const f = imageInput.files[0];
+      if (!f) return result.innerText = 'Please select an image first';
+
+      const fd = new FormData();
+      fd.append('image', f);
+
+      try {
+        const res = await fetch(BACKEND_URL + '/compress', { method: 'POST', body: fd });
+        const j = await res.json();
+        if (!j.ok) return result.innerText = 'Error: ' + (j.error || 'unknown');
+
+        const dl = document.createElement('a');
+        // download URL is served by backend; prefix with BACKEND_URL when frontend is remote
+        const downloadUrl = (j.download && j.download.startsWith('http')) ? j.download : (BACKEND_URL + j.download);
+        dl.href = downloadUrl;
+        dl.download = j.filename;
+        dl.innerText = 'Download compressed file';
+  result.innerHTML = '';
+  result.appendChild(dl);
+
+  // refresh gallery so uploaded files appear
+  loadGallery();
+
+        // Show comparison area
+        const comparison = document.getElementById('comparison');
+        const origImg = document.getElementById('origImg');
+        const compImg = document.getElementById('compImg');
+        const topWrap = document.getElementById('topWrap');
+        const range = document.getElementById('compareRange');
+        const sizesInfo = document.getElementById('sizesInfo');
+
+        const origUrl = URL.createObjectURL(f);
+        origImg.src = origUrl;
+        compImg.src = downloadUrl;
+        comparison.style.display = 'block';
+
+        // when compImg loads, sync height and update the overlay width
+        compImg.onload = () => {
+          // ensure topWrap has same height as image
+          topWrap.style.width = (range.value) + '%';
+          topWrap.style.height = compImg.height + 'px';
+          origImg.style.maxWidth = compImg.style.maxWidth = '100%';
+        };
+
+        range.addEventListener('input', () => {
+          topWrap.style.width = range.value + '%';
+        });
+
+        // Show sizes. The backend returns sizes in bytes; fallback to client file size.
+        const originalBytes = j.originalSize || f.size || 0;
+        const outputBytes = j.outputSize || 0;
+        function hr(n){ if(!n) return '—'; const units=['B','KB','MB','GB']; let i=0; let v=n; while(v>=1024 && i<units.length-1){ v/=1024; i++; } return v.toFixed(1)+' '+units[i]; }
+        const reduction = (originalBytes && outputBytes) ? Math.round((1 - (outputBytes/originalBytes))*100) : null;
+        sizesInfo.innerHTML = `<strong>original:</strong> ${hr(originalBytes)} &nbsp; <strong>compressed:</strong> ${hr(outputBytes)} ${reduction!==null?`&nbsp; (<strong>${reduction}%</strong> reduction)`:''}`;
+      } catch (err) {
+        console.error(err);
+        result.innerText = 'Upload failed: ' + err.message;
+      }
+    });
+  </script>
+</body>
+</html>
