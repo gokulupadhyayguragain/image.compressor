@@ -63,8 +63,8 @@
   <script>
     // If you open the frontend via Live Server (http://127.0.0.1:5500),
     // set BACKEND_URL to 'http://localhost:3000' (where the backend runs).
-    // When served by the backend itself, leave as empty string.
-    const BACKEND_URL = 'http://localhost:3000';
+    // When served through nginx in production (Kubernetes), leave as empty string.
+    const BACKEND_URL = '';
 
   const form = document.getElementById('uploadForm');
     const imageInput = document.getElementById('imageInput');
