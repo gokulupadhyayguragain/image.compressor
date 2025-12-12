@@ -1,6 +1,7 @@
 FROM nginx:alpine
-COPY frontend/default.conf /tmp/my-default.conf
-COPY frontend/docker-entrypoint.d/ /docker-entrypoint.d/
-RUN chmod +x /docker-entrypoint.d/99-copy-config.sh
-COPY frontend/ /usr/share/nginx/html/
+# Copy nginx config directly
+COPY frontend/default.conf /etc/nginx/conf.d/default.conf
+# Copy static files
+COPY frontend/index.html /usr/share/nginx/html/
 EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,191 @@
+# ====================================================================
+# MASTER KUBERNETES DEPLOYMENT - SIMPLE & RELIABLE
+# ====================================================================
+# This is the ONE file that should work every time.
+# No complex rollout strategies, just simple deployments.
+# ====================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gocools-backend
+  labels:
+    app: gocools-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gocools-backend
+  template:
+    metadata:
+      labels:
+        app: gocools-backend
+        version: v1
+    spec:
+      containers:
+      - name: backend
+        image: 143495498572.dkr.ecr.ap-southeast-2.amazonaws.com/image-compressor-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "3000"
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 300m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        volumeMounts:
+        - name: input-storage
+          mountPath: /app/../input
+        - name: output-storage
+          mountPath: /app/../output
+      volumes:
+      - name: input-storage
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: output-storage
+        emptyDir:
+          sizeLimit: 1Gi
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gocools-backend
+  labels:
+    app: gocools-backend
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app: gocools-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gocools-frontend
+  labels:
+    app: gocools-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gocools-frontend
+  template:
+    metadata:
+      labels:
+        app: gocools-frontend
+        version: v1
+    spec:
+      containers:
+      - name: frontend
+        image: 143495498572.dkr.ecr.ap-southeast-2.amazonaws.com/image-compressor-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 15
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 2
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gocools-frontend
+  labels:
+    app: gocools-frontend
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app: gocools-frontend
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gocools-backend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gocools-backend
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: gocools-frontend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: gocools-frontend
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70

@@ -125,71 +125,37 @@ jobs:
           ECR_REPOSITORY_BACKEND: ${{ secrets.ECR_REPOSITORY_BACKEND }}
           ECR_REPOSITORY_FRONTEND: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
 
-      - name: Delete stuck pods before applying new deployment
+      - name: Delete ALL existing pods (clean slate)
         run: |
-          echo "🧹 Cleaning up ALL existing pods..."
+          echo "🧹 Nuclear cleanup - deleting ALL app pods..."
+          kubectl delete deployment gocools-backend gocools-frontend --ignore-not-found=true
+          kubectl delete pods -l 'app in (gocools-backend,gocools-frontend)' --force --grace-period=0 || true
           
-          # Get all pod names first
-          BACKEND_PODS=$(kubectl get pods -l app=gocools-backend -o name 2>/dev/null || true)
-          FRONTEND_PODS=$(kubectl get pods -l app=gocools-frontend -o name 2>/dev/null || true)
+          echo "Waiting 15 seconds for complete cleanup..."
+          sleep 15
           
-          # Force delete all backend pods
-          if [ ! -z "$BACKEND_PODS" ]; then
-            echo "Deleting backend pods: $BACKEND_PODS"
-            echo "$BACKEND_PODS" | xargs kubectl delete --force --grace-period=0 2>/dev/null || true
-          fi
-          
-          # Force delete all frontend pods
-          if [ ! -z "$FRONTEND_PODS" ]; then
-            echo "Deleting frontend pods: $FRONTEND_PODS"
-            echo "$FRONTEND_PODS" | xargs kubectl delete --force --grace-period=0 2>/dev/null || true
-          fi
-          
-          echo "Waiting 10 seconds for cleanup..."
-          sleep 10
-          
-          # Verify cleanup
           echo "Verifying cleanup..."
-          kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' || echo "All pods deleted"
+          kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' || echo "✅ All pods deleted"
 
-      - name: Apply Kubernetes manifests
-        run: kubectl apply -f k8s/deployment-generated.yaml
-
-      - name: Wait for old pods to terminate
+      - name: Apply MASTER deployment manifest
         run: |
-          echo "⏳ Ensuring all old pods are gone..."
-          for i in {1..60}; do
-            REMAINING=$(kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' --field-selector=status.phase!=Running -o name 2>/dev/null | wc -l)
-            TOTAL=$(kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' -o name 2>/dev/null | wc -l)
-            
-            echo "Attempt $i/60: Total pods=$TOTAL, Non-running=$REMAINING"
-            
-            # If we have more than 2 total pods (1 backend + 1 frontend), force delete extras
-            if [ "$TOTAL" -gt 2 ]; then
-              echo "⚠️  Found $TOTAL pods (expected 2), force deleting extras..."
-              kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' --sort-by=.metadata.creationTimestamp -o name | head -n -2 | xargs kubectl delete --force --grace-period=0 2>/dev/null || true
-              sleep 5
-              continue
-            fi
-            
-            # If only 2 or fewer pods and all running, we're good
-            if [ "$TOTAL" -le 2 ] && [ "$REMAINING" -eq 0 ]; then
-              echo "✅ Cleanup complete: $TOTAL pods running"
-              break
-            fi
-            
-            sleep 2
-          done
+          echo "🚀 Applying master deployment..."
           
-          echo "Final pod status:"
-          kubectl get pods -l 'app in (gocools-backend,gocools-frontend)'
+          # Update image tags in master deployment
+          sed -i "s|image: 143495498572.dkr.ecr.ap-southeast-2.amazonaws.com/image-compressor-backend:.*|image: ${{ secrets.ECR_REGISTRY }}/image-compressor-backend:latest|g" k8s/master-deployment.yaml
+          sed -i "s|image: 143495498572.dkr.ecr.ap-southeast-2.amazonaws.com/image-compressor-frontend:.*|image: ${{ secrets.ECR_REGISTRY }}/image-compressor-frontend:latest|g" k8s/master-deployment.yaml
+          
+          kubectl apply -f k8s/master-deployment.yaml
 
       - name: Wait for deployments to be ready
         run: |
-          echo "Waiting for backend..."
-          kubectl -n default rollout status deployment/gocools-backend --timeout=5m
-          echo "Waiting for frontend..."
-          kubectl -n default rollout status deployment/gocools-frontend --timeout=5m
+          echo "⏳ Waiting for backend deployment..."
+          kubectl wait --for=condition=available --timeout=3m deployment/gocools-backend
+          
+          echo "⏳ Waiting for frontend deployment..."
+          kubectl wait --for=condition=available --timeout=3m deployment/gocools-frontend
+          
+          echo "✅ Both deployments ready!"
           
       - name: Verify pods are running
         if: always()
