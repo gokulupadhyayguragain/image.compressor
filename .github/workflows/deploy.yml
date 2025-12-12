@@ -115,16 +115,6 @@ jobs:
 
           aws eks update-kubeconfig --name "${{ secrets.EKS_CLUSTER_NAME }}" --region "${{ secrets.AWS_REGION }}"
 
-      - name: Prepare deployment manifest with ECR images
-        run: |
-          # Replace placeholders in deployment template with actual ECR values
-          envsubst < k8s/deployment.yaml.template > k8s/deployment-generated.yaml
-          cat k8s/deployment-generated.yaml
-        env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-          ECR_REPOSITORY_BACKEND: ${{ secrets.ECR_REPOSITORY_BACKEND }}
-          ECR_REPOSITORY_FRONTEND: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
-
       - name: Delete ALL existing pods (clean slate)
         run: |
           echo "🧹 Nuclear cleanup - deleting ALL app pods..."
