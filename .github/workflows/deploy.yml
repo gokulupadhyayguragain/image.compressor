@@ -3,10 +3,20 @@ name: Build, push Docker images to ECR and deploy to EKS
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - deploy
+          - destroy-cluster
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy')
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
     steps:
@@ -50,6 +60,10 @@ jobs:
   deploy-to-eks:
     needs: build-and-push
     runs-on: ubuntu-latest
+    if: |
+      always() && 
+      (needs.build-and-push.result == 'success') &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy'))
     env:
       CREATE_EKS: ${{ secrets.CREATE_EKS }}
     steps:
@@ -114,6 +128,58 @@ jobs:
         run: |
           kubectl -n default rollout status deployment/gocools-backend --timeout=3m
           kubectl -n default rollout status deployment/gocools-frontend --timeout=3m
+
+      - name: Get service URL
+        run: |
+          echo "🌐 Waiting for LoadBalancer URL..."
+          sleep 30
+          FRONTEND_URL=$(kubectl get svc gocools-frontend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "✅ Deployment complete!"
+          echo "🌐 Frontend URL: http://$FRONTEND_URL"
+          echo ""
+          echo "📊 Pods:"
+          kubectl get pods
+          echo ""
+          echo "📊 Services:"
+          kubectl get svc
+          echo ""
+          echo "📊 HPA:"
+          kubectl get hpa || echo "HPA not configured"
+
+  destroy-cluster:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy-cluster'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Install eksctl
+        run: |
+          curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin
+
+      - name: Delete EKS cluster
+        run: |
+          chmod +x ./scripts/eksctl.sh
+          CI=true ./scripts/eksctl.sh down ${{ secrets.EKS_CLUSTER_NAME }} ${{ secrets.AWS_REGION }}
+          
+      - name: Cleanup ECR images (optional)
+        continue-on-error: true
+        run: |
+          # Delete all images from ECR to save storage costs
+          aws ecr batch-delete-image \
+            --repository-name "${{ secrets.ECR_REPOSITORY_BACKEND }}" \
+            --image-ids "$(aws ecr list-images --repository-name "${{ secrets.ECR_REPOSITORY_BACKEND }}" --query 'imageIds[*]' --output json)" || true
+          aws ecr batch-delete-image \
+            --repository-name "${{ secrets.ECR_REPOSITORY_FRONTEND }}" \
+            --image-ids "$(aws ecr list-images --repository-name "${{ secrets.ECR_REPOSITORY_FRONTEND }}" --query 'imageIds[*]' --output json)" || true
+          echo "✅ EKS cluster deleted! This will stop all associated costs."
 ---
 name: Node CI
 
