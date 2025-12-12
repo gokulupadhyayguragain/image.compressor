@@ -67,6 +67,15 @@ jobs:
 
       - name: Update kubeconfig for EKS
         run: |
+          # Verify the cluster exists first to provide a clearer error message when it doesn't
+          if ! aws eks describe-cluster --name "${{ secrets.EKS_CLUSTER_NAME }}" --region "${{ secrets.AWS_REGION }}" >/dev/null 2>&1; then
+            echo "EKS cluster '${{ secrets.EKS_CLUSTER_NAME }}' not found in region '${{ secrets.AWS_REGION }}'."
+            echo "Listing available clusters in region '${{ secrets.AWS_REGION }}':"
+            aws eks list-clusters --region "${{ secrets.AWS_REGION }}" || true
+            echo "\nPlease ensure the secret EKS_CLUSTER_NAME is set to an existing cluster, or create the cluster before running this workflow."
+            exit 1
+          fi
+
           aws eks update-kubeconfig --name "${{ secrets.EKS_CLUSTER_NAME }}" --region "${{ secrets.AWS_REGION }}"
 
       - name: Update deployments with new images
