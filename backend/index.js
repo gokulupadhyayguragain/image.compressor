@@ -48,44 +48,57 @@ app.post('/compress', upload.single('image'), async (req, res) => {
 
   try {
     const mime = req.file.mimetype || '';
-    // Apply lossless compression for PNG, for other types use reasonable non-destructive transforms
     let finalOutPath = outPath;
+    
+    // Get original file size BEFORE compression
+    const originalSize = fs.statSync(inPath).size;
+    
+    // Apply compression with fixed quality settings
     if (mime === 'image/png') {
       await sharp(inPath)
-        .png({ compressionLevel: 9, adaptiveFiltering: true, palette: false })
+        .png({ 
+          compressionLevel: 9, 
+          quality: 80,
+          palette: true,
+          effort: 10
+        })
         .toFile(finalOutPath);
     } else if (mime === 'image/webp') {
       await sharp(inPath)
-        .webp({ lossless: true })
+        .webp({ 
+          quality: 80,
+          effort: 6
+        })
         .toFile(finalOutPath);
     } else if (mime === 'image/gif') {
-      // sharp does not write animated GIFs; for single-frame GIF we'll convert to optimized PNG
+      // Convert GIF to optimized PNG
       finalOutPath = outPath.replace(path.extname(outPath), '.png');
       await sharp(inPath)
-        .png({ compressionLevel: 9 })
+        .png({ compressionLevel: 9, quality: 80 })
         .toFile(finalOutPath);
     } else if (mime === 'image/jpeg' || mime === 'image/jpg') {
-      // JPEG compression: higher compression level = lower quality = smaller file
-      const compressionLevel = parseInt(req.query.quality) || 50;
-      const quality = Math.max(1, 100 - compressionLevel);
+      // JPEG compression with fixed quality 80
       await sharp(inPath)
-        .jpeg({ quality, mozjpeg: true })
+        .jpeg({ 
+          quality: 80, 
+          mozjpeg: true,
+          progressive: true
+        })
         .toFile(finalOutPath);
     } else {
-      // Default: attempt to copy or write same ext
+      // Default: try sharp conversion
       try {
-        await sharp(inPath).toFile(finalOutPath);
+        await sharp(inPath)
+          .jpeg({ quality: 80, mozjpeg: true })
+          .toFile(finalOutPath);
       } catch (e) {
         // fallback to copy
         fs.copyFileSync(inPath, finalOutPath);
       }
     }
 
-    // Gather sizes (in bytes) for display in frontend
-    let originalSize = 0;
-    let outputSize = 0;
-    try { originalSize = fs.statSync(inPath).size; } catch (e) { /* ignore */ }
-    try { outputSize = fs.statSync(finalOutPath).size; } catch (e) { /* ignore */ }
+    // Get output file size AFTER compression
+    const outputSize = fs.statSync(finalOutPath).size;
 
     // Return JSON with download URL and sizes
     const downloadUrl = `/output/${path.basename(finalOutPath)}`;

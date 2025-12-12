@@ -135,8 +135,8 @@ jobs:
 
       - name: Wait for rollouts
         run: |
-          kubectl -n default rollout status deployment/gocools-backend --timeout=3m
-          kubectl -n default rollout status deployment/gocools-frontend --timeout=3m
+          kubectl -n default rollout status deployment/gocools-backend --timeout=5m
+          kubectl -n default rollout status deployment/gocools-frontend --timeout=5m
 
       - name: Get service URL
         run: |
