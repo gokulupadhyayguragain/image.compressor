@@ -67,14 +67,23 @@ jobs:
         with:
           version: 'latest'
 
+      - name: Check if EKS cluster exists
+        id: check-cluster
+        run: |
+          if aws eks describe-cluster --name "${{ secrets.EKS_CLUSTER_NAME }}" --region "${{ secrets.AWS_REGION }}" >/dev/null 2>&1; then
+            echo "cluster_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "cluster_exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install eksctl
-        if: ${{ env.CREATE_EKS == 'true' }}
+        if: ${{ env.CREATE_EKS == 'true' && steps.check-cluster.outputs.cluster_exists == 'false' }}
         run: |
           curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
           sudo mv /tmp/eksctl /usr/local/bin
 
-      - name: Create EKS cluster (if enabled)
-        if: ${{ env.CREATE_EKS == 'true' }}
+      - name: Create EKS cluster (if enabled and not exists)
+        if: ${{ env.CREATE_EKS == 'true' && steps.check-cluster.outputs.cluster_exists == 'false' }}
         run: |
           chmod +x ./scripts/eksctl.sh
           CI=true ./scripts/eksctl.sh up ${{ secrets.EKS_CLUSTER_NAME }} ${{ secrets.AWS_REGION }} t3.small
