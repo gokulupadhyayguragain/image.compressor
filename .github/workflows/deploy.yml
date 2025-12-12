@@ -50,6 +50,8 @@ jobs:
   deploy-to-eks:
     needs: build-and-push
     runs-on: ubuntu-latest
+    env:
+      CREATE_EKS: ${{ secrets.CREATE_EKS }}
     steps:
       - uses: actions/checkout@v4
 
@@ -66,7 +68,7 @@ jobs:
           version: 'latest'
 
       - name: Create EKS cluster (if enabled)
-        if: ${{ secrets.CREATE_EKS == 'true' }}
+        if: ${{ env.CREATE_EKS == 'true' }}
         env:
           CI: true
         run: ./scripts/eksctl.sh up ${{ secrets.EKS_CLUSTER_NAME }} ${{ secrets.AWS_REGION }} t3.small
