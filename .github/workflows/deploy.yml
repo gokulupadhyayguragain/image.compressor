@@ -115,14 +115,23 @@ jobs:
 
           aws eks update-kubeconfig --name "${{ secrets.EKS_CLUSTER_NAME }}" --region "${{ secrets.AWS_REGION }}"
 
-      - name: Apply Kubernetes manifests
-        run: kubectl apply -f k8s/deployment.yaml
-
-      - name: Update deployments with new images
+      - name: Prepare deployment manifest with ECR images
         run: |
-          set -e
-          kubectl -n default set image deployment/gocools-backend backend=${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:latest --record
-          kubectl -n default set image deployment/gocools-frontend frontend=${{ secrets.ECR_REGISTRY }}/${{ secrets.ECR_REPOSITORY_FRONTEND }}:latest --record
+          # Replace placeholders in deployment template with actual ECR values
+          envsubst < k8s/deployment.yaml.template > k8s/deployment-generated.yaml
+          cat k8s/deployment-generated.yaml
+        env:
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          ECR_REPOSITORY_BACKEND: ${{ secrets.ECR_REPOSITORY_BACKEND }}
+          ECR_REPOSITORY_FRONTEND: ${{ secrets.ECR_REPOSITORY_FRONTEND }}
+
+      - name: Apply Kubernetes manifests
+        run: kubectl apply -f k8s/deployment-generated.yaml
+
+      - name: Restart deployments to pull new images
+        run: |
+          kubectl rollout restart deployment/gocools-backend
+          kubectl rollout restart deployment/gocools-frontend
 
       - name: Wait for rollouts
         run: |

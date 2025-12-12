@@ -1,0 +1,191 @@
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  🚨 CRITICAL FIX: WRONG DOCKER IMAGES!                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+🐛 PROBLEM FOUND:
+Your pods are running but using old Docker Hub images (gocools/backend:latest)
+instead of your ECR images! That's why you get 404 errors.
+
+┌────────────────────────────────────────────────────────────┐
+│           ⚡ QUICK FIX (Manual - Right Now)                │
+└────────────────────────────────────────────────────────────┘
+
+If you have kubectl access to your cluster:
+
+1. Get your ECR registry URL:
+   - Go to AWS Console → ECR
+   - Format: 123456789012.dkr.ecr.us-east-1.amazonaws.com
+
+2. Run the fix script:
+   cd k8s
+   export ECR_REGISTRY="<your-ecr-url>"
+   ./fix-ecr-images.sh
+
+This will update the running pods to use ECR images immediately!
+
+┌────────────────────────────────────────────────────────────┐
+│        🔄 AUTOMATIC FIX (GitHub Actions - Future)          │
+└────────────────────────────────────────────────────────────┘
+
+I've updated GitHub Actions to automatically use ECR images.
+
+Next push will:
+1. ✅ Build images and push to ECR
+2. ✅ Generate deployment with ECR image URLs
+3. ✅ Deploy correct images to EKS
+
+┌────────────────────────────────────────────────────────────┐
+│              📋 VERIFY YOUR GITHUB SECRETS                 │
+└────────────────────────────────────────────────────────────┘
+
+Make sure these are set correctly:
+
+ECR_REGISTRY = 123456789012.dkr.ecr.us-east-1.amazonaws.com
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+               Your AWS account ID and region
+
+ECR_REPOSITORY_BACKEND = gocools/backend
+ECR_REPOSITORY_FRONTEND = gocools/frontend
+
+Full image paths should look like:
+123456789012.dkr.ecr.us-east-1.amazonaws.com/gocools/backend:latest
+123456789012.dkr.ecr.us-east-1.amazonaws.com/gocools/frontend:latest
+
+┌────────────────────────────────────────────────────────────┐
+│            🔍 DEBUGGING CURRENT DEPLOYMENT                 │
+└────────────────────────────────────────────────────────────┘
+
+Check what images your pods are actually using:
+
+kubectl get pods -o wide
+kubectl describe pod <backend-pod-name>
+
+Look for the "Image:" line - it should be your ECR URL, not Docker Hub!
+
+┌────────────────────────────────────────────────────────────┐
+│              🎯 STEPS TO FIX RIGHT NOW                     │
+└────────────────────────────────────────────────────────────┘
+
+OPTION 1: Manual Fix (Immediate - 2 minutes)
+--------------------------------------------
+1. Connect to your cluster:
+   aws eks update-kubeconfig --name gocools-cluster --region ap-southeast-2
+
+2. Run fix script:
+   cd k8s
+   export ECR_REGISTRY="<your-account-id>.dkr.ecr.ap-southeast-2.amazonaws.com"
+   ./fix-ecr-images.sh
+
+3. Wait for pods to restart (2-3 minutes)
+
+4. Test your app - should work now!
+
+
+OPTION 2: Push to GitHub (Automatic - 5 minutes)
+-------------------------------------------------
+1. Commit and push changes:
+   ./quick-push.sh
+
+2. Wait for GitHub Actions to complete
+
+3. GitHub Actions will deploy correct ECR images
+
+4. Test your app
+
+
+OPTION 3: Manual kubectl commands (Advanced)
+---------------------------------------------
+aws eks update-kubeconfig --name gocools-cluster --region ap-southeast-2
+
+# Replace with your actual ECR registry
+ECR_REGISTRY="123456789012.dkr.ecr.ap-southeast-2.amazonaws.com"
+
+kubectl set image deployment/gocools-backend \
+  backend=$ECR_REGISTRY/gocools/backend:latest
+
+kubectl set image deployment/gocools-frontend \
+  frontend=$ECR_REGISTRY/gocools/frontend:latest
+
+kubectl rollout status deployment/gocools-backend
+kubectl rollout status deployment/gocools-frontend
+
+┌────────────────────────────────────────────────────────────┐
+│                  ✅ HOW TO VERIFY FIX                      │
+└────────────────────────────────────────────────────────────┘
+
+After applying the fix:
+
+1. Check pods are running:
+   kubectl get pods
+
+2. Check they're using ECR images:
+   kubectl describe pod <backend-pod-name> | grep Image:
+   
+   Should show: 123456...amazonaws.com/gocools/backend:latest
+   NOT: docker.io/gocools/backend:latest
+
+3. Check logs (should not have image pull errors):
+   kubectl logs -l app=gocools-backend --tail=50
+
+4. Test the app:
+   - Upload image ✅
+   - Gallery loads ✅
+   - No 404 errors ✅
+
+┌────────────────────────────────────────────────────────────┐
+│              🔑 KEY CHANGES MADE                           │
+└────────────────────────────────────────────────────────────┘
+
+Created:
+✓ k8s/deployment.yaml.template - Template with ECR variables
+✓ k8s/fix-ecr-images.sh - Quick fix script
+
+Updated:
+✓ .github/workflows/deploy.yml - Now generates deployment with ECR URLs
+
+The workflow now:
+1. Builds and pushes to ECR ✅
+2. Substitutes ECR URLs into deployment template ✅
+3. Applies the generated deployment ✅
+4. Forces pod restart to pull new images ✅
+
+┌────────────────────────────────────────────────────────────┐
+│                  💡 WHY THIS HAPPENED                      │
+└────────────────────────────────────────────────────────────┘
+
+The deployment.yaml had hardcoded Docker Hub images:
+  image: gocools/backend:latest  ❌
+
+But GitHub Actions was pushing to ECR:
+  123456789012.dkr.ecr.us-east-1.amazonaws.com/gocools/backend:latest
+
+The workflow tried to update images AFTER deployment, but if the
+initial Docker Hub pull failed, the pod would crash loop.
+
+Now we generate the deployment with correct ECR URLs from the start! ✅
+
+┌────────────────────────────────────────────────────────────┐
+│                  🆘 STILL NOT WORKING?                     │
+└────────────────────────────────────────────────────────────┘
+
+If you still see 404 errors after fixing images:
+
+1. Check ECR repositories exist:
+   aws ecr describe-repositories --region ap-southeast-2
+
+2. Check images are pushed:
+   aws ecr list-images --repository-name gocools/backend --region ap-southeast-2
+
+3. Check pod logs:
+   kubectl logs -l app=gocools-backend --tail=100
+
+4. Check if pods can pull from ECR:
+   kubectl describe pod <pod-name> | grep -A 10 Events
+
+5. Verify GitHub secrets are correct:
+   - ECR_REGISTRY should include region (ap-southeast-2)
+   - ECR_REPOSITORY names match what's in ECR
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     🎯 IMMEDIATE ACTION: Run Option 1 or push code!     ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
