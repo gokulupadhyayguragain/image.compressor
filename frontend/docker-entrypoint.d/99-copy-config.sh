@@ -1,6 +1,8 @@
 #!/bin/sh
-# Add proxy locations to nginx config after entrypoint modifications
-echo "Adding proxy locations to nginx config..."
+# Copy custom nginx config and add compress location
+echo "Copying custom nginx config..."
+cp /tmp/my-default.conf /etc/nginx/conf.d/default.conf
+echo "Adding compress location..."
 sed -i '/^}/i\
     # Proxy compress endpoint to backend\
     location /compress {\
@@ -11,4 +13,4 @@ sed -i '/^}/i\
         proxy_set_header X-Forwarded-Proto $scheme;\
     }\
 ' /etc/nginx/conf.d/default.conf
-echo "Proxy locations added successfully"
+echo "Config updated successfully"
