@@ -29,7 +29,9 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 80
-  type: ClusterIP
+  # Use LoadBalancer so the frontend can be exposed externally in most managed clusters.
+  # If your cluster doesn't support LoadBalancer, change this to NodePort and use the node's IP.
+  type: LoadBalancer
 ---
 apiVersion: apps/v1
 kind: Deployment
