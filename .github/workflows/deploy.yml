@@ -127,26 +127,62 @@ jobs:
 
       - name: Delete stuck pods before applying new deployment
         run: |
-          echo "🧹 Cleaning up stuck pods..."
-          kubectl delete pod -l app=gocools-frontend --force --grace-period=0 || true
-          kubectl delete pod -l app=gocools-backend --force --grace-period=0 || true
-          sleep 5
+          echo "🧹 Cleaning up ALL existing pods..."
+          
+          # Get all pod names first
+          BACKEND_PODS=$(kubectl get pods -l app=gocools-backend -o name 2>/dev/null || true)
+          FRONTEND_PODS=$(kubectl get pods -l app=gocools-frontend -o name 2>/dev/null || true)
+          
+          # Force delete all backend pods
+          if [ ! -z "$BACKEND_PODS" ]; then
+            echo "Deleting backend pods: $BACKEND_PODS"
+            echo "$BACKEND_PODS" | xargs kubectl delete --force --grace-period=0 2>/dev/null || true
+          fi
+          
+          # Force delete all frontend pods
+          if [ ! -z "$FRONTEND_PODS" ]; then
+            echo "Deleting frontend pods: $FRONTEND_PODS"
+            echo "$FRONTEND_PODS" | xargs kubectl delete --force --grace-period=0 2>/dev/null || true
+          fi
+          
+          echo "Waiting 10 seconds for cleanup..."
+          sleep 10
+          
+          # Verify cleanup
+          echo "Verifying cleanup..."
+          kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' || echo "All pods deleted"
 
       - name: Apply Kubernetes manifests
         run: kubectl apply -f k8s/deployment-generated.yaml
 
       - name: Wait for old pods to terminate
         run: |
-          echo "⏳ Waiting for old pods to fully terminate..."
-          for i in {1..30}; do
-            OLD_PODS=$(kubectl get pods -l app=gocools-frontend -o json | jq '.items | length')
-            if [ "$OLD_PODS" -le 1 ]; then
-              echo "✅ Old pods terminated"
+          echo "⏳ Ensuring all old pods are gone..."
+          for i in {1..60}; do
+            REMAINING=$(kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' --field-selector=status.phase!=Running -o name 2>/dev/null | wc -l)
+            TOTAL=$(kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' -o name 2>/dev/null | wc -l)
+            
+            echo "Attempt $i/60: Total pods=$TOTAL, Non-running=$REMAINING"
+            
+            # If we have more than 2 total pods (1 backend + 1 frontend), force delete extras
+            if [ "$TOTAL" -gt 2 ]; then
+              echo "⚠️  Found $TOTAL pods (expected 2), force deleting extras..."
+              kubectl get pods -l 'app in (gocools-backend,gocools-frontend)' --sort-by=.metadata.creationTimestamp -o name | head -n -2 | xargs kubectl delete --force --grace-period=0 2>/dev/null || true
+              sleep 5
+              continue
+            fi
+            
+            # If only 2 or fewer pods and all running, we're good
+            if [ "$TOTAL" -le 2 ] && [ "$REMAINING" -eq 0 ]; then
+              echo "✅ Cleanup complete: $TOTAL pods running"
               break
             fi
-            echo "Waiting... ($i/30)"
+            
             sleep 2
           done
+          
+          echo "Final pod status:"
+          kubectl get pods -l 'app in (gocools-backend,gocools-frontend)'
 
       - name: Wait for deployments to be ready
         run: |
